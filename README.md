@@ -13,3 +13,4 @@ how to ?
     Clone repository, and put both .yaml files in the glance configuration folder
     Remove .template from filenames
     Fill API keys and tokens following your services
+    original sources from Aylabs : https://github.com/AyLabsCode/glance-templates/tree/main
