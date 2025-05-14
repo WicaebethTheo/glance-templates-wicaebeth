@@ -1,0 +1,10 @@
+theme:
+  background-color: 0 0 95
+  primary-color: 210 80 40
+  contrast-multiplier: 1.1
+  light: true
+pages:
+  !include: homelab.template
+  !include: stargate.template
+branding:
+  logo-text: "root@wicaebeth:~#" 

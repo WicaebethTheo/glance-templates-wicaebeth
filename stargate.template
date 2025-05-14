@@ -1,0 +1,582 @@
+- name: Stargate
+  columns:
+    - size: small
+      widgets:
+        - type: server-stats
+          servers:
+            - type: local
+              name: Glance
+
+        - type: custom-api
+          title: Proxmox Stats
+          cache: 1m
+          url: https://setyouripservicehere:8006/api2/json/cluster/resources
+          allow-insecure: true
+          headers:
+            Accept: application/json
+            Authorization: PVEAPIToken=root@pam!YOURAPIKEY
+          template: |
+            <style>
+              .resource-bar {
+                width: 100%;
+                height: 10px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 5px;
+                overflow: hidden;
+                margin-bottom: 8px;
+                border: 1px solid rgba(255,255,255,0.07);
+              }
+              .resource-bar-fill {
+                height: 100%;
+                border-radius: 3px;
+                transition: width 0.5s ease;
+                min-width: 5px;
+              }
+              .resource-bar-fill-cpu {
+                background: linear-gradient(90deg, #3863A0 0%, #4A7EC8 100%);
+              }
+              .resource-bar-fill-mem {
+                background: linear-gradient(90deg, #9D4C7D 0%, #B76395 100%);
+              }
+              .resource-bar-fill-disk {
+                background: linear-gradient(90deg, #2D7A43 0%, #4B9D64 100%);
+              }
+              .resource-item {
+                margin-bottom: 18px;
+              }
+              .resource-value {
+                font-weight: 500;
+                color: var(--color-highlight);
+                font-size: 1.1em;
+                text-align: right;
+              }
+              .resource-label {
+                color: var(--color-text-base);
+                opacity: 0.9;
+                text-transform: uppercase;
+                font-size: 0.85em;
+                margin-bottom: 4px;
+              }
+              .cluster-header {
+                padding: 8px;
+                text-align: center;
+                color: var(--color-text-base);
+                font-size: 0.9em;
+                margin-bottom: 15px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .counter-section {
+                display: flex;
+                justify-content: space-between;
+                text-align: center;
+                margin-top: 15px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                padding-top: 12px;
+              }
+              .counter-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              .counter-value {
+                color: var(--color-highlight);
+                font-size: 1.1em;
+                font-weight: 500;
+              }
+              .counter-label {
+                color: var(--color-text-base);
+                text-transform: uppercase;
+                font-size: 0.7em;
+                margin-top: 2px;
+                opacity: 0.9;
+              }
+              .node-section {
+                margin-top: 20px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                padding-top: 12px;
+              }
+              .node-title {
+                font-size: 0.9em;
+                color: var(--color-text-base);
+                margin-bottom: 10px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .node-stats {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+              }
+              .node-name {
+                font-weight: 500;
+                color: var(--color-highlight);
+                font-size: 0.95em;
+              }
+              .node-value {
+                text-align: right;
+                color: var(--color-text-base);
+                font-size: 0.85em;
+              }
+              .pve-stats {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+              }
+              .stat-value {
+                font-weight: 500;
+                color: var(--color-highlight);
+              }
+              .usage-info {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 2px;
+                font-size: 0.85em;
+                color: var(--color-text-base);
+              }
+            </style>
+
+            <div class="flex flex-column gap-5">
+              <!-- Statistiques CPU et RAM globales du cluster -->
+              <div class="flex flex-column">
+                <div class="cluster-header">Ressources du Cluster</div>
+                
+                <!-- CPU Usage -->
+                {{ $cpu_total := 0.0 }}
+                {{ $cpu_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  {{ $cpu_total = add $cpu_total (.Float "maxcpu") }}
+                  {{ $cpu_used = add $cpu_used (mul (.Float "maxcpu") (.Float "cpu")) }}
+                {{ end }}
+                {{ $cpu_percent := 0.0 }}
+                {{ if gt $cpu_total 0.0 }}
+                  {{ $cpu_percent = mul (div $cpu_used $cpu_total) 100 }}
+                {{ end }}
+                
+                <!-- RAM Usage -->
+                {{ $mem_total := 0.0 }}
+                {{ $mem_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  {{ $mem_total = add $mem_total (.Float "maxmem") }}
+                  {{ $mem_used = add $mem_used (.Float "mem") }}
+                {{ end }}
+                {{ $mem_percent := 0.0 }}
+                {{ if gt $mem_total 0.0 }}
+                  {{ $mem_percent = mul (div $mem_used $mem_total) 100 }}
+                {{ end }}
+                
+                <!-- Disk Usage -->
+                {{ $disk_total := 0.0 }}
+                {{ $disk_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"storage\")#" }}
+                  {{ $disk_total = add $disk_total (.Float "maxdisk") }}
+                  {{ $disk_used = add $disk_used (.Float "disk") }}
+                {{ end }}
+                {{ $disk_percent := 0.0 }}
+                {{ if gt $disk_total 0.0 }}
+                  {{ $disk_percent = mul (div $disk_used $disk_total) 100 }}
+                {{ end }}
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">CPU</span>
+                    <span class="resource-value">{{ printf "%.1f" $cpu_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-cpu" style="width: {{ $cpu_percent }}%;"></div>
+                  </div>
+                </div>
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">RAM</span>
+                    <span class="resource-value">{{ printf "%.1f" $mem_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-mem" style="width: {{ $mem_percent }}%;"></div>
+                  </div>
+                  <div class="usage-info">
+                    <span>RAM Utilisation</span>
+                    <span>{{ printf "%.1f" (div $mem_used 1073741824) }}/{{ printf "%.1f" (div $mem_total 1073741824) }} GB</span>
+                  </div>
+                </div>
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">Stockage</span>
+                    <span class="resource-value">{{ printf "%.1f" $disk_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-disk" style="width: {{ $disk_percent }}%;"></div>
+                  </div>
+                  <div class="usage-info">
+                    <span>Capacité Disque</span>
+                    <span>{{ printf "%.1f" (div $disk_used 1073741824) }}/{{ printf "%.1f" (div $disk_total 1073741824) }} GB</span>
+                  </div>
+                </div>
+
+                <!-- Nœuds individuels -->
+                <div class="node-section">
+                  <div class="node-title">Nœuds Individuels</div>
+                  {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  <div class="node-stats">
+                    <span class="node-name">{{ .String "node" }}</span>
+                    <div class="node-value">
+                      <span class="stat-value">{{ printf "%.1f" (mul (.Float "cpu") 100) }}%</span> CPU
+                      <span class="stat-value" style="margin-left: 10px;">{{ printf "%.1f" (mul (div (.Float "mem") (.Float "maxmem")) 100) }}%</span> RAM
+                    </div>
+                  </div>
+                  {{ end }}
+                </div>
+              </div>
+              
+              <!-- Compteurs -->
+              <div class="counter-section">
+                <div class="counter-item">
+                  {{ $nodes_online := len (.JSON.Array "data.#(type==\"node\")#|#(status==\"online\")#") }}
+                  {{ $nodes_total := len (.JSON.Array "data.#(type==\"node\")#") }}
+                  <span class="counter-value">{{ $nodes_online }}/{{ $nodes_total }}</span>
+                  <span class="counter-label">Node</span>
+                </div>
+                <div class="counter-item">
+                  {{ $lxc_running := len (.JSON.Array "data.#(type==\"lxc\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $lxc_total := len (.JSON.Array "data.#(type==\"lxc\")#|#(template==0)#") }}
+                  <span class="counter-value">{{ $lxc_running }}/{{ $lxc_total }}</span>
+                  <span class="counter-label">LXC</span>
+                </div>
+                <div class="counter-item">
+                  {{ $qemu_running := len (.JSON.Array "data.#(type==\"qemu\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $qemu_total := len (.JSON.Array "data.#(type==\"qemu\")#|#(template==0)#") }}
+                  <span class="counter-value">{{ $qemu_running }}/{{ $qemu_total }}</span>
+                  <span class="counter-label">VM</span>
+                </div>
+                <div class="counter-item">
+                  {{ $storage_available := len (.JSON.Array "data.#(type==\"storage\")#|#(status==\"available\")#") }}
+                  {{ $storage_total := len (.JSON.Array "data.#(type==\"storage\")#") }}
+                  <span class="counter-value">{{ $storage_available }}/{{ $storage_total }}</span>
+                  <span class="counter-label">Storage</span>
+                </div>
+              </div>
+            </div>
+
+    - size: full
+      widgets:
+          - type: monitor
+            cache: 1m
+            title: HARDWARE
+            sites:
+              - title: StarGate
+                url: http://setyouripservicehere:8006
+                allow-insecure: true
+                icon: di:proxmox
+              - title: Unraid Stargate
+                url: http://setyouripservicehere:8006
+                allow-insecure: true
+                icon: di:unraid
+              
+          - type: monitor
+            cache: 1m
+            title: SERVARR
+            sites:
+              - title: qBittorrent
+                url: http://setyouripservicehere:8080
+                allow-insecure: true
+                icon: di:qbittorrent
+              - title: Radarr
+                url: http://setyouripservicehere:7878
+                allow-insecure: true  
+                icon: di:radarr
+              - title: Sonarr
+                url: http://setyouripservicehere:8989
+                allow-insecure: true
+                icon: di:sonarr
+              - title: Prowlarr
+                url: http://setyouripservicehere:9696
+                allow-insecure: true
+                icon: di:prowlarr
+              - title: Flaresolverr
+                url: http://setyouripservicehere:8191
+                icon: di:flaresolverr
+              - title: Jackett
+                url: http://setyouripservicehere:9117
+                allow-insecure: true
+                icon: di:jackett
+              - title: EmbyServer
+                url: http://setyouripservicehere:8096
+                allow-insecure: true
+                icon: di:emby
+
+          - type: monitor
+            cache: 1m
+            title: SERVICES
+            sites:
+              - title: Nginx
+                url: http://setyouripservicehere:8080
+                icon: di:nginx
+              - title: Jellyseerr
+                url: http://setyouripservicehere:5055
+                icon: di:jellyseerr
+
+          - type: custom-api
+            cache: 1m
+            title: Emby Now Playing
+            url: http://setyouripservicehere:8096/Sessions
+            parameters:
+              api_key: YOUREMBYAPIKEY
+              activeWithinSeconds: 30
+            template: |
+              {{/* USER VARIABLES BEGIN */}}
+
+              {{/* Set to true if using the widget in a small column */}}
+              {{ $isSmallColumn := false }}
+
+              {{/* Set to true to use compact mode */}}
+              {{ $isCompact := false }}
+
+              {{/* Set to "text" to display the playing state in plain text */}}
+              {{/* Set to "indicator" to display a status badge instead of text */}}
+              {{/* Set to "" to hide the play state */}}
+              {{ $playState := "text" }}
+
+              {{/* Set to true to show thumbnails */}}
+              {{ $showThumbnail := true }}
+
+              {{/* Set to true to display paused items */}}
+              {{ $showPaused := true }}
+
+              {{/* Set to false to hide "Progress Bar" */}}
+              {{ $showProgressBar := true }}
+
+              {{/* Set to false to hide "Progress Info". Depends on $showProgressBar */}}
+              {{ $showProgressInfo := true }}
+
+              {{/* USER VARIABLES END */}}
+
+              {{ if eq .Response.StatusCode 200 }}
+                {{ $sessions := .JSON.Array "" }}
+                {{ $validSessions := 0 }}
+                
+                {{ range $sessions }}
+                  {{ if and (ne (.String "NowPlayingItem.Name") "") (ne (.String "UserName") "") }}
+                    {{ $validSessions = add $validSessions 1 }}
+                  {{ end }}
+                {{ end }}
+
+                {{ if eq $validSessions 0 }}
+                  <p>Rien n'est en cours de lecture actuellement.</p>
+                {{ else }}
+                  {{ if $isSmallColumn }}
+                    <div class="flex flex-column gap-10">
+                  {{ else }}
+                    <div class="gap-10" style="display: grid; grid-template-columns: repeat(2, 1fr);">
+                  {{ end }}
+
+                    {{ range $i, $session := $sessions }}
+                      {{/* WIDGET VARIABLES BEGIN */}}
+                      
+                      {{ $hasContent := and (ne ($session.String "NowPlayingItem.Name") "") (ne ($session.String "UserName") "") }}
+                      {{ if not $hasContent }}
+                        {{ continue }}
+                      {{ end }}
+
+                      {{ $mediaType := $session.String "NowPlayingItem.Type" }}
+                      {{ $isPaused := $session.Bool "PlayState.IsPaused" }}
+                      {{ $isPlaying := not $isPaused }}
+                      {{ $state := "playing" }}
+                      {{ if $isPaused }}
+                        {{ $state = "paused" }}
+                      {{ end }}
+
+                      {{ $isMovie := eq $mediaType "Movie" }}
+                      {{ $isShows := eq $mediaType "Episode" }}
+                      {{ $isMusic := eq $mediaType "Audio" }}
+
+                      {{ $user := $session.String "UserName"}}
+                      {{ $movieTitle := $session.String "NowPlayingItem.Name" }}
+                      {{ $showTitle := $session.String "NowPlayingItem.SeriesName" }}
+                      {{ $showSeason := $session.String "NowPlayingItem.ParentIndexNumber" }}
+                      {{ $showEpisode := $session.String "NowPlayingItem.IndexNumber" }}
+                      {{ $episodeTitle := $session.String "NowPlayingItem.Name" }}
+                      {{ $artist := $session.String "NowPlayingItem.AlbumArtist" }}
+                      {{ $albumTitle := $session.String "NowPlayingItem.Album" }}
+                      {{ $songTitle := $session.String "NowPlayingItem.Name" }}
+                      {{ $default := $session.String "NowPlayingItem.Name" }}
+
+                      {{ $thumbID := $session.String "NowPlayingItem.Id" }}
+                      {{ if $isShows }}
+                        {{ $thumbID = $session.String "NowPlayingItem.SeriesId" }}
+                      {{ end }}
+                      {{ $thumbURL := concat "http://setyouripservicehere:8096/Items/" $thumbID "/Images/Primary?api_key=YOUREMBYAPIKEY" }}
+
+                      {{ $duration := $session.Float "NowPlayingItem.RunTimeTicks" }}
+                      {{ $offset := $session.Float "PlayState.PositionTicks" }}
+                      {{ $progress := 0 }}
+                      {{ $remainingSeconds := 0 }}
+                      {{ if and (gt $duration 0.0) (ge $offset 0.0) }}
+                        {{ $progress = mul 100 ( div $offset $duration ) | toInt }}
+                        {{ $remainingSeconds = div (sub $duration $offset) 10000000 | toInt }}
+                      {{ end }}
+                      {{ $remainingSecondsString := printf "%ds" $remainingSeconds }}
+                      {{ $endTime := offsetNow $remainingSecondsString }}
+                      {{ $endHour := printf "%02d" $endTime.Hour }}
+                      {{ $endMinute := printf "%02d" $endTime.Minute }}
+
+                      {{/* WIDGET VARIABLES END */}}
+
+                      {{/* WIDGET TEMPLATE BEGIN */}}
+
+                      {{ if or $isPlaying $showPaused }}
+                        <div class="card gap-5">
+                          <div class="flex items-center gap-10 size-h3">
+                            <span class="color-primary">{{ $user }}</span>
+
+                            {{ if eq $playState "text" }}
+                              <span {{ if $isPlaying }}class="color-primary"{{ end }}>
+                                ({{ $state }})
+                              </span>
+                            {{ else if eq $playState "indicator" }}
+                              <style>
+                                @keyframes pulse {
+                                  0% { box-shadow: 0 0 0 0 var(--color-text-base); }
+                                  40% { box-shadow: 0 0 0 4px transparent; }
+                                  100% { box-shadow: 0 0 0 4px transparent; }
+                                }
+                              </style>
+                              <div
+                                style="
+                                  {{ if $isPlaying }}
+                                    animation: pulse 5s infinite;
+                                    background: var(--color-primary);
+                                  {{ else }}
+                                    background: var(--color-text-base-muted);
+                                  {{ end }}
+                                  height: .7rem;
+                                  width: .7rem;
+                                  border-radius: 100%;
+                                "
+                              ></div>
+                            {{ else }}
+                            {{ end }}
+                          </div>
+
+                          <hr class="margin-bottom-5" />
+
+                          <div class="flex items-center gap-10" style="align-items: stretch;">
+                            {{ if eq $showThumbnail true }}
+                              <img
+                                src="{{ $thumbURL }}"
+                                alt="{{ $default }} thumbnail"
+                                class="shrink-0"
+                                loading="lazy"
+                                style="max-width: 7.5rem;
+                                  border: 2px solid var(--color-primary);
+                                  border-radius: var(--border-radius);
+                                  object-fit: cover;
+                                  {{ if $isCompact }}aspect-ratio: 1;{{ end }}
+                                "
+                              />
+                            {{ end }}
+
+                            <ul
+                              class="flex flex-column grow justify-evenly"
+                              style="width: 0;"
+                            >
+                              {{ if $isMovie }}
+                                <li class="size-h4 color-highlight">{{ $movieTitle }}</li>
+                              {{ else if $isShows }}
+                                {{ if $isCompact }}
+                                  <ul class="list-horizontal-text flex-nowrap">
+                                    <li class="text-truncate shrink-0 color-highlight">{{ concat "S" $showSeason "E" $showEpisode }}</li>
+                                    <li class="text-truncate size-h4">{{ $showTitle }}</li>
+                                  </ul>
+                                  <li class="text-truncate color-highlight">{{ $episodeTitle }}</li>
+                                {{ else }}
+                                  <li class="text-truncate size-h4 color-highlight">{{ $showTitle }}</li>
+                                  <li class="text-truncate">{{ concat "Saison " $showSeason " Épisode " $showEpisode }}</li>
+                                  <li class="text-truncate color-primary">{{ $episodeTitle }}</li>
+                                {{ end }}
+                              {{ else if $isMusic }}
+                                {{ if $isCompact }}
+                                  <ul class="list-horizontal-text flex-nowrap">
+                                    <li class="text-truncate shrink-0 color-highlight">{{ $artist }}</li>
+                                    <li class="text-truncate">{{ $albumTitle }}</li>
+                                  </ul>
+                                {{ else }}
+                                  <li class="text-truncate size-h4 color-highlight">{{ $artist }}</li>
+                                  <li class="text-truncate">{{ $albumTitle }}</li>
+                                {{ end }}
+                                <li class="text-truncate color-primary">{{ $songTitle }}</li>
+                              {{ else }}
+                                <li class="size-h4 color-highlight">{{ $default }}</li>
+                              {{ end }}
+
+                              <li>
+                                {{ if and $isPlaying $showProgressBar }}
+                                  <div class="flex gap-10 items-center margin-top-5">
+                                    <div
+                                      class="grow"
+                                      style="height: 0.8rem;
+                                        max-width: 32rem;
+                                        border: 1px solid var(--color-text-base);
+                                        border-radius: var(--border-radius);
+                                        overflow: hidden;"
+                                    >
+                                      <style>
+                                        @keyframes progress-animation {
+                                          to { width: 100%; }
+                                        }
+                                      </style>
+                                      <div
+                                        style="height: 100%;
+                                          width: {{ $progress }}%;
+                                          background: var(--color-primary);
+                                          border-radius: 3px;
+                                          transition: width 1s linear;
+                                          animation: progress-animation {{ $remainingSeconds }}s linear forwards;"
+                                        data-progress="{{ $progress }}"
+                                        data-remaining="{{ $remainingSeconds }}">
+                                      </div>
+                                    </div>
+
+                                    {{ if $showProgressInfo }}
+                                      <p class="color-highlight">{{ $progress }}% {{ if and ( not $isCompact ) ( not $isSmallColumn ) }}(fin à {{ end }}{{ $endHour -}}:{{- $endMinute }})</p>
+                                    {{ end }}
+                                  </div>
+                                {{ end }}
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      {{ end }}
+
+                      {{/* WIDGET TEMPLATE END */}}
+
+                    {{ end }}
+                  </div>
+                {{ end }}
+              {{ else }}
+                <p>Impossible de récupérer les sessions Emby</p>
+              {{ end }}
+              
+    - size: small
+      widgets:
+        - type: weather
+          units: metric
+          hour-format: 24h
+          location: Paris, France
+        - type: bookmarks
+          groups:
+            - links:
+                - title: Proxmox Scripts
+                  url: https://community-scripts.github.io/ProxmoxVE/
+                - title: Tailscale 
+                  url: https://login.tailscale.com/admin/machines
+                - title: Freebox
+                  url: https://mafreebox.freebox.fr/#Fbx.os.app.lanbrowser.app
+                - title: Cloudflare
+                  url: https://dash.cloudflare.com/

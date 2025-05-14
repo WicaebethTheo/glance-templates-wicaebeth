@@ -1,0 +1,553 @@
+- name: Homelab
+  columns:
+    - size: small
+      widgets:
+        - type: custom-api
+          title: Proxmox Stats
+          cache: 1m
+          url: https://setyouripservicehere:8006/api2/json/cluster/resources
+          allow-insecure: true
+          headers:
+            Accept: application/json
+            Authorization: PVEAPIToken=root@pam!YOURAPIKEY
+          template: |
+            <style>
+              .resource-bar {
+                width: 100%;
+                height: 10px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 5px;
+                overflow: hidden;
+                margin-bottom: 8px;
+                border: 1px solid rgba(255,255,255,0.07);
+              }
+              .resource-bar-fill {
+                height: 100%;
+                border-radius: 3px;
+                transition: width 0.5s ease;
+                min-width: 5px;
+              }
+              .resource-bar-fill-cpu {
+                background: linear-gradient(90deg, #3863A0 0%, #4A7EC8 100%);
+              }
+              .resource-bar-fill-mem {
+                background: linear-gradient(90deg, #9D4C7D 0%, #B76395 100%);
+              }
+              .resource-bar-fill-disk {
+                background: linear-gradient(90deg, #2D7A43 0%, #4B9D64 100%);
+              }
+              .resource-item {
+                margin-bottom: 18px;
+              }
+              .resource-value {
+                font-weight: 500;
+                color: var(--color-highlight);
+                font-size: 1.1em;
+                text-align: right;
+              }
+              .resource-label {
+                color: var(--color-text-base);
+                opacity: 0.9;
+                text-transform: uppercase;
+                font-size: 0.85em;
+                margin-bottom: 4px;
+              }
+              .cluster-header {
+                padding: 8px;
+                text-align: center;
+                color: var(--color-text-base);
+                font-size: 0.9em;
+                margin-bottom: 15px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .counter-section {
+                display: flex;
+                justify-content: space-between;
+                text-align: center;
+                margin-top: 15px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                padding-top: 12px;
+              }
+              .counter-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              .counter-value {
+                color: var(--color-highlight);
+                font-size: 1.1em;
+                font-weight: 500;
+              }
+              .counter-label {
+                color: var(--color-text-base);
+                text-transform: uppercase;
+                font-size: 0.7em;
+                margin-top: 2px;
+                opacity: 0.9;
+              }
+              .node-section {
+                margin-top: 20px;
+                border-top: 1px solid rgba(255,255,255,0.05);
+                padding-top: 12px;
+              }
+              .node-title {
+                font-size: 0.9em;
+                color: var(--color-text-base);
+                margin-bottom: 10px;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .node-stats {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+              }
+              .node-name {
+                font-weight: 500;
+                color: var(--color-highlight);
+                font-size: 0.95em;
+              }
+              .node-value {
+                text-align: right;
+                color: var(--color-text-base);
+                font-size: 0.85em;
+              }
+              .pve-stats {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+              }
+              .stat-value {
+                font-weight: 500;
+                color: var(--color-highlight);
+              }
+              .usage-info {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 2px;
+                font-size: 0.85em;
+                color: var(--color-text-base);
+              }
+            </style>
+
+            <div class="flex flex-column gap-5">
+              <!-- Statistiques CPU et RAM globales du cluster -->
+              <div class="flex flex-column">
+                <div class="cluster-header">Ressources du Cluster</div>
+                
+                <!-- CPU Usage -->
+                {{ $cpu_total := 0.0 }}
+                {{ $cpu_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  {{ $cpu_total = add $cpu_total (.Float "maxcpu") }}
+                  {{ $cpu_used = add $cpu_used (mul (.Float "maxcpu") (.Float "cpu")) }}
+                {{ end }}
+                {{ $cpu_percent := 0.0 }}
+                {{ if gt $cpu_total 0.0 }}
+                  {{ $cpu_percent = mul (div $cpu_used $cpu_total) 100 }}
+                {{ end }}
+                
+                <!-- RAM Usage -->
+                {{ $mem_total := 0.0 }}
+                {{ $mem_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  {{ $mem_total = add $mem_total (.Float "maxmem") }}
+                  {{ $mem_used = add $mem_used (.Float "mem") }}
+                {{ end }}
+                {{ $mem_percent := 0.0 }}
+                {{ if gt $mem_total 0.0 }}
+                  {{ $mem_percent = mul (div $mem_used $mem_total) 100 }}
+                {{ end }}
+                
+                <!-- Disk Usage -->
+                {{ $disk_total := 0.0 }}
+                {{ $disk_used := 0.0 }}
+                {{ range .JSON.Array "data.#(type==\"storage\")#" }}
+                  {{ $disk_total = add $disk_total (.Float "maxdisk") }}
+                  {{ $disk_used = add $disk_used (.Float "disk") }}
+                {{ end }}
+                {{ $disk_percent := 0.0 }}
+                {{ if gt $disk_total 0.0 }}
+                  {{ $disk_percent = mul (div $disk_used $disk_total) 100 }}
+                {{ end }}
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">CPU</span>
+                    <span class="resource-value">{{ printf "%.1f" $cpu_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-cpu" style="width: {{ $cpu_percent }}%;"></div>
+                  </div>
+                </div>
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">RAM</span>
+                    <span class="resource-value">{{ printf "%.1f" $mem_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-mem" style="width: {{ $mem_percent }}%;"></div>
+                  </div>
+                  <div class="usage-info">
+                    <span>RAM Utilisation</span>
+                    <span>{{ printf "%.1f" (div $mem_used 1073741824) }}/{{ printf "%.1f" (div $mem_total 1073741824) }} GB</span>
+                  </div>
+                </div>
+                
+                <div class="resource-item">
+                  <div class="flex justify-between">
+                    <span class="resource-label">Stockage</span>
+                    <span class="resource-value">{{ printf "%.1f" $disk_percent }}%</span>
+                  </div>
+                  <div class="resource-bar">
+                    <div class="resource-bar-fill resource-bar-fill-disk" style="width: {{ $disk_percent }}%;"></div>
+                  </div>
+                  <div class="usage-info">
+                    <span>Capacité Disque</span>
+                    <span>{{ printf "%.1f" (div $disk_used 1073741824) }}/{{ printf "%.1f" (div $disk_total 1073741824) }} GB</span>
+                  </div>
+                </div>
+
+                <!-- Nœuds individuels -->
+                <div class="node-section">
+                  <div class="node-title">Nœuds Individuels</div>
+                  {{ range .JSON.Array "data.#(type==\"node\")#" }}
+                  <div class="node-stats">
+                    <span class="node-name">{{ .String "node" }}</span>
+                    <div class="node-value">
+                      <span class="stat-value">{{ printf "%.1f" (mul (.Float "cpu") 100) }}%</span> CPU
+                      <span class="stat-value" style="margin-left: 10px;">{{ printf "%.1f" (mul (div (.Float "mem") (.Float "maxmem")) 100) }}%</span> RAM
+                    </div>
+                  </div>
+                  {{ end }}
+                </div>
+              </div>
+              
+              <!-- Compteurs -->
+              <div class="counter-section">
+                <div class="counter-item">
+                  {{ $nodes_online := len (.JSON.Array "data.#(type==\"node\")#|#(status==\"online\")#") }}
+                  {{ $nodes_total := len (.JSON.Array "data.#(type==\"node\")#") }}
+                  <span class="counter-value">{{ $nodes_online }}/{{ $nodes_total }}</span>
+                  <span class="counter-label">Node</span>
+                </div>
+                <div class="counter-item">
+                  {{ $lxc_running := len (.JSON.Array "data.#(type==\"lxc\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $lxc_total := len (.JSON.Array "data.#(type==\"lxc\")#|#(template==0)#") }}
+                  <span class="counter-value">{{ $lxc_running }}/{{ $lxc_total }}</span>
+                  <span class="counter-label">LXC</span>
+                </div>
+                <div class="counter-item">
+                  {{ $qemu_running := len (.JSON.Array "data.#(type==\"qemu\")#|#(status==\"running\")#|#(template==0)#") }}
+                  {{ $qemu_total := len (.JSON.Array "data.#(type==\"qemu\")#|#(template==0)#") }}
+                  <span class="counter-value">{{ $qemu_running }}/{{ $qemu_total }}</span>
+                  <span class="counter-label">VM</span>
+                </div>
+                <div class="counter-item">
+                  {{ $storage_available := len (.JSON.Array "data.#(type==\"storage\")#|#(status==\"available\")#") }}
+                  {{ $storage_total := len (.JSON.Array "data.#(type==\"storage\")#") }}
+                  <span class="counter-value">{{ $storage_available }}/{{ $storage_total }}</span>
+                  <span class="counter-label">Storage</span>
+                </div>
+              </div>
+            </div>
+            
+        - type: custom-api
+          cache: 1h
+          title: Internet Speed
+          url: http://setyouripservicehere:5216/api/speedtests?hours=24
+          template: |
+            <div class="flex justify-between text-center margin-block-3">
+                <div>
+                    <div class="color-highlight size-h3">{{ .JSON.Get "0.download" }}</div>
+                    <div class="size-h6">DOWNLOAD</div>
+                </div>
+                <div>
+                    <div class="color-highlight size-h3">{{ .JSON.Get "0.upload" }}</div>
+                    <div class="size-h6">UPLOAD</div>
+                </div>
+                <div>
+                    <div class="color-highlight size-h3">{{ .JSON.Get "0.ping" }}</div>
+                    <div class="size-h6">PING</div>
+                </div>
+            </div>
+
+        - type: custom-api
+          title: Tailscale Devices
+          title-url: https://login.tailscale.com/admin/machines
+          url: https://api.tailscale.com/api/v2/tailnet/-/devices
+          headers:
+            Authorization: Bearer YOURTAILSCALEAPIKEY
+          cache: 10m
+          template: |
+            <style>
+              .device-info-container {
+                position: relative;
+                overflow: hidden;
+                height: 1.5em;
+              }
+
+              .device-info {
+                display: flex;
+                transition: transform 0.2s ease, opacity 0.2s ease;
+              }
+
+              .device-ip {
+                position: absolute;
+                top: 0;
+                left: 0;
+                transform: translateY(-100%);
+                opacity: 0;
+                transition: transform 0.2s ease, opacity 0.2s ease;
+              }
+
+              .device-info-container:hover .device-info {
+                transform: translateY(100%);
+                opacity: 0;
+              }
+
+              .device-info-container:hover .device-ip {
+                transform: translateY(0);
+                opacity: 1;
+              }
+
+              .update-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background-color: var(--color-primary);
+                display: inline-block;
+                margin-left: 4px;
+                vertical-align: middle;
+              }
+
+              .offline-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background-color: var(--color-negative);
+                display: inline-block;
+                margin-left: 4px;
+                vertical-align: middle;
+              }
+
+              .device-name-container {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+              }
+
+              .indicators-container {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+              }
+            </style>
+            <ul class="list list-gap-10 collapsible-container" data-collapse-after="4">
+              {{ range .JSON.Array "devices" }}
+              <li>
+                <div class="flex items-center gap-10">
+                  <div class="device-name-container grow">
+                    <span class="size-h4 block text-truncate color-primary">
+                      {{ findMatch "^([^.]+)" (.String "name") }}
+                    </span>
+                    <div class="indicators-container">
+                      {{ if (.Bool "updateAvailable") }}
+                      <span class="update-indicator" data-popover-type="text" data-popover-text="Update Available"></span>
+                      {{ end }}
+
+                      {{ $lastSeen := .String "lastSeen" | parseTime "rfc3339" }}
+                      {{ if not ($lastSeen.After (offsetNow "-10s")) }}
+                      {{ $lastSeenTimezoned := $lastSeen.In now.Location }}
+                      <span class="offline-indicator" data-popover-type="text"
+                        data-popover-text="Offline - Last seen {{ $lastSeenTimezoned.Format " Jan 2 3:04pm" }}"></span>
+                      {{ end }}
+
+                    </div>
+                  </div>
+                </div>
+                <div class="device-info-container">
+                  <ul class="list-horizontal-text device-info">
+                    <li>{{ .String "os" }}</li>
+                    <li>{{ .String "user" }}</li>
+                  </ul>
+                  <div class="device-ip">
+                    {{ .String "addresses.0"}}
+                  </div>
+                </div>
+              </li>
+              {{ end }}
+            </ul>
+
+    - size: full
+      widgets:
+          - type: monitor
+            cache: 1m
+            title: HARDWARE
+            sites:
+              - title: PVE
+                url: http://setyouripservicehere:8006
+                allow-insecure: true
+                icon: di:proxmox
+              - title: Osiris
+                url: http://setyouripservicehere:8006
+                allow-insecure: true
+                icon: di:proxmox
+              - title: Unraid Atlantis
+                url: http://setyouripservicehere
+                allow-insecure: true
+                icon: di:unraid
+
+          - type: monitor
+            cache: 1m
+            title: NETWORK
+            sites:
+              - title: PiHole 
+                url: http://setyouripservicehere/admin/login
+                icon: si:pihole
+                allow-insecure: true
+
+              - title: Unifi UI
+                url: https://setyouripservicehere:8443
+                allow-insecure: true
+                icon: di:ubiquiti
+
+              - title: Uptime Kuma
+                url: https://status.lol.com
+                allow-insecure: true
+                icon: si:uptimekuma
+
+          - type: monitor
+            cache: 1m
+            title: NETWORK - VPN to VPS
+            sites:
+              - title: NPM - 1
+                url: http://setyouripservicehere:81
+                allow-insecure: true
+                icon: si:npm
+
+              - title: NPM - 2
+                url: http://setyouripservicehere:81
+                allow-insecure: true
+                icon: si:npm
+
+              - title: NPM - 3
+                url: http://setyouripservicehere:81
+                allow-insecure: true
+                icon: si:npm
+
+
+          - type: monitor
+            cache: 1m
+            title: WEB
+            sites:
+              - title: WBoost 
+                url: https://lol.com
+                icon: https://wicaebeth.com/assets/images/logo.png
+
+              - title: Wicaebeth 
+                url: https://wicaebeth.com/
+                allow-insecure: true
+                icon: https://wicaebeth.com/assets/images/profile.jpg
+
+              - title: Meneboo 
+                url: https://private.com
+                allow-insecure: true
+                icon: di:bookstack
+
+              - title: Time2Clutch 
+                url: https://www.t2c.com
+                allow-insecure: true
+                icon: https://www.time2clutch.com/_next/image?url=%2Fassets%2Fimages%2FT2C_test.png&w=3840&q=75
+
+
+          - type: monitor
+            cache: 1m
+            title: PVE CONTAINERS
+            sites:
+              - title: Homepage 
+                url: http://setyouripservicehere:3000
+                allow-insecure: true
+                icon: si:homepage
+              - title: mySpeed
+                url: http://setyouripservicehere:5216
+                allow-insecure: true
+                icon: si:speedtest
+              - title: GLPI 
+                url: http://setyouripservicehere:80
+                allow-insecure: true
+                icon: di:glpi
+              - title: Rustdesk 
+                url: http://rustdesk.local
+                allow-insecure: true
+                icon: di:rustdesk
+              - title: Docmost
+                url: https://docmost.lol.com
+                allow-insecure: true
+                icon: https://raw.githubusercontent.com/selfhst/icons/refs/heads/main/webp/docmost.webp
+              - title: Glance 
+                url: http://localhost:8080
+                icon: di:glance
+              - title: OpenWebUI 
+                url: http://openwebui.local:8080/
+                allow-insecure: true
+                icon: di:openai
+              - title: Apache-Guacamole 
+                url: https://bot.time2clutch.com/
+                allow-insecure: true
+                icon: di:apache
+
+          - type: monitor
+            cache: 1m
+            title: BOTS
+            sites:
+              - title: Redbot-T2C 
+                url: http://redbot-t2c.local
+                allow-insecure: true
+                icon: di:discord
+              - title: Redbot-W-Boost 
+                url: http://redbot-w-boost.local
+                allow-insecure: true
+                icon: di:discord
+
+    - size: small
+      widgets:
+        - type: weather
+          units: metric
+          hour-format: 24h
+          location: Douai, France
+        - type: bookmarks
+          groups:
+            - links:
+                - title: Proxmox Scripts
+                  url: https://community-scripts.github.io/ProxmoxVE/
+                - title: Tailscale 
+                  url: https://login.tailscale.com/admin/machines
+                - title: Freebox
+                  url: https://mafreebox.freebox.fr/#Fbx.os.app.lanbrowser.app
+                - title: Cloudflare
+                  url: https://dash.cloudflare.com/
+        - type: custom-api
+          title: Steam Specials
+          cache: 12h
+          url: https://store.steampowered.com/api/featuredcategories?cc=fr
+          template: |
+            <ul class="list list-gap-10 collapsible-container" data-collapse-after="5">
+            {{ range .JSON.Array "specials.items" }}
+              <li>
+                <a class="size-h4 color-highlight block text-truncate" href="https://store.steampowered.com/app/{{ .Int "id" }}/">{{ .String "name" }}</a>
+                <ul class="list-horizontal-text">
+                  <li>{{ .Int "final_price" | toFloat | mul 0.01 | printf "$%.2f" }}</li>
+                  {{ $discount := .Int "discount_percent" }}
+                  <li{{ if ge $discount 40 }} class="color-positive"{{ end }}>{{ $discount }}% off</li>
+                </ul>
+              </li>
+            {{ end }}
+            </ul> 
