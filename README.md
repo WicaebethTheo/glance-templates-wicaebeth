@@ -6,6 +6,8 @@ YAML configuration for glanceapp/glance
 
 ![image](https://github.com/user-attachments/assets/95719fee-0efa-4589-a787-998e6402933f)
 
+![image](https://github.com/user-attachments/assets/ea9d33a5-2c5a-4aba-bc16-a9175025e21b)
+
 
 Notes : Emby History don't work.
 
